@@ -144,6 +144,11 @@ model Product {
   priceFcfa Int
   isActive  Boolean @default(true)
 
+  /// Categorie commerciale (bieres, sodas, jus...). Conservee en base plutot
+  /// que deduite du nom : le catalogue doit pouvoir etre regroupe sans que le
+  /// client ait a reimplementer les regles de classement.
+  category String @default("autres")
+
   orderItems OrderItem[]
   deliveries Delivery[]
 
