@@ -9,7 +9,7 @@ import { ArrowLeft, ShoppingCart, Search, Plus, Minus, Loader2, PackageX } from 
 import { toCartProduct, useCart } from "@/context/CartContext";
 import { fetchProducts, type ApiProduct } from "@/lib/apiOrders";
 import { formatFcfa } from "@/lib/format";
-import type { ProductCategory } from "@/data/products";
+import { isProductCategory } from "@/data/categories";
 
 const ClientCatalog = () => {
   const navigate = useNavigate();
@@ -17,7 +17,10 @@ const ClientCatalog = () => {
   const { quantityOf, addItem, increment, totalItems } = useCart();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const activeCategory = searchParams.get("category") as ProductCategory | null;
+  // La categorie vient de l'URL : `isProductCategory` la valide plutot que de la
+  // forcer par un cast, ce qui laisserait passer une valeur arbitraire.
+  const requestedCategory = searchParams.get("category");
+  const activeCategory = isProductCategory(requestedCategory) ? requestedCategory : null;
 
   const { data: products, isLoading, isError, refetch } = useQuery({
     queryKey: ["products"],

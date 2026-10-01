@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import { fetchProducts } from "@/lib/apiOrders";
-import { categories } from "@/data/products";
+import { fetchProducts, type ApiProduct } from "@/lib/apiOrders";
+import { categories } from "@/data/categories";
 import { STARTER_ORDER_QUOTA } from "@/lib/constants";
 import { formatFcfa } from "@/lib/format";
 
@@ -27,6 +27,18 @@ const CATEGORY_ICONS = {
   sodas: Coffee,
   jus: Milk,
 } as const;
+
+/**
+ * Compteur par categorie, calcule sur les produits reellement charges.
+ *
+ * Afficher un nombre present dans une constante aurait laisse l'ecran
+ * annoncer « 24 bières » alors que le catalogue n'en contient aucune.
+ */
+const productCountByCategory = (products: ApiProduct[]): Record<string, number> =>
+  products.reduce<Record<string, number>>((acc, product) => {
+    acc[product.category] = (acc[product.category] ?? 0) + 1;
+    return acc;
+  }, {});
 
 const ClientDashboard = () => {
   const navigate = useNavigate();
@@ -44,10 +56,12 @@ const ClientDashboard = () => {
   });
 
   const featuredProducts = (products ?? []).slice(0, 3);
+  const counts = productCountByCategory(products ?? []);
 
   const categoriesWithIcons = categories.map((category) => ({
     ...category,
     icon: CATEGORY_ICONS[category.id],
+    count: counts[category.id] ?? 0,
   }));
 
   return (
