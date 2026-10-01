@@ -1,0 +1,232 @@
+// Schéma Prisma — N'Djam'Boisson Pro
+//
+// Règle structurante : toute table métier porte une colonne d'appartenance
+// (`clientId`, `depotId`, `driverId`). C'est ce qui rend le cloisonnement
+// possible en SQL et non seulement dans la couche applicative.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  SUPPLIER
+  DRIVER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  MOOV
+  AIRTEL
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  phone        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  isActive     Boolean  @default(true)
+
+  client  Client?
+  depot   Depot?
+  driver  Driver?
+
+  refreshTokens RefreshToken[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Un client est un établissement : il porte son quota et son point de livraison.
+///
+/// `id` est la MEME cle que `User.id` (relation 1-1 a cle primaire partagee).
+/// Un identifiant de profil distinct de celui de l'utilisateur est une source
+/// de bug majeure : le cloisonnement filtre par identifiant, et confondre les
+/// deux vide silencieusement les resultats au lieu de produire une erreur.
+model Client {
+  id   String @id
+  user User   @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  establishmentName String
+  monthlyOrderQuota Int     @default(15)
+  quotaUsed         Int     @default(0)
+  latitude          Float?
+  longitude         Float?
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Un dépôt est l'unité d'exploitation d'un fournisseur. Toute commande et tout
+/// livreur en dépendent : c'est la frontière de cloisonnement côté fournisseur.
+model Depot {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name     String
+  latitude  Float?
+  longitude Float?
+
+  products Product[]
+  orders   Order[]
+  drivers  Driver[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Livreur rattache a un depot. Comme `Client`, il partage la cle primaire de
+/// `User` : `Delivery.driverId` est donc directement comparable a l'identifiant
+/// de session, sans table de correspondance.
+model Driver {
+  id   String @id
+  user User   @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  depotId String
+  depot   Depot  @relation(fields: [depotId], references: [id], onDelete: Cascade)
+
+  vehicleNumber  String
+  isAvailable    Boolean @default(true)
+
+  deliveries Delivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([depotId])
+}
+
+model Product {
+  id        String @id @default(uuid())
+  depotId   String
+  depot     Depot  @relation(fields: [depotId], references: [id], onDelete: Cascade)
+
+  name      String
+  unit      String  @default("casier")
+  image     String?
+  priceFcfa Int
+  isActive  Boolean @default(true)
+
+  orderItems OrderItem[]
+  deliveries Delivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([depotId])
+}
+
+model Order {
+  id String @id @default(uuid())
+
+  /// Référence lisible par l'humain, indexée et non devinable par l'API.
+  reference String @unique
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  depotId String
+  depot   Depot  @relation(fields: [depotId], references: [id], onDelete: Cascade)
+
+  status         OrderStatus   @default(PENDING)
+  paymentMethod  PaymentMethod
+  paymentStatus  PaymentStatus @default(UNPAID)
+  subtotalFcfa   Int
+  commissionFcfa Int
+  totalFcfa      Int
+
+  deliveryAddress String
+  deliveryPhone   String
+
+  items OrderItem[]
+
+  delivery Delivery?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([depotId])
+  @@index([status])
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// Prix figé au moment de la commande : le catalogue peut évoluer ensuite.
+  unitPriceFcfa Int
+  quantity      Int
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+/// Une livraison matérialise l'attribution d'une commande à un livreur.
+/// Séparée de Order pour que le cloisonnement livreur porte sur une table
+/// qui n'expose aucune autre commande que la sienne.
+model Delivery {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  driverId String
+  driver   Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  stopOrder      Int
+  amountToCollect Int
+  cashReceived   Int?
+  changeGiven    Int?
+
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([driverId])
+  @@index([driverId, completedAt])
+}

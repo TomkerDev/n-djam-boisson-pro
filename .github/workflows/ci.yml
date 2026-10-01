@@ -30,3 +30,56 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  api-tests:
+    name: API — tests d'integration RBAC
+    runs-on: ubuntu-latest
+
+    # PostgreSQL est un service : les tests d'integration exercent de vraies
+    # requetes et de vraies contraintes, pas une base en memoire.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ndjam
+          POSTGRES_PASSWORD: ndjam_dev_password
+          POSTGRES_DB: ndjam_boisson
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ndjam -d ndjam_boisson"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ndjam:ndjam_dev_password@localhost:5432/ndjam_boisson?schema=public
+      # Secret de test uniquement : la configuration refuse le secret
+      # d'exemple de .env.example.
+      JWT_SECRET: ci-secret-de-test-uniquement-a-ne-pas-utiliser-hors-ci-0123456789
+      CORS_ORIGINS: http://localhost:8080
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Run integration tests
+        run: npx vitest run

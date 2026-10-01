@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ndjam-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ndjam
+      POSTGRES_PASSWORD: ndjam_dev_password
+      POSTGRES_DB: ndjam_boisson
+    ports:
+      - "5432:5432"
+    volumes:
+      - ndjam_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ndjam -d ndjam_boisson"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ndjam_pgdata:

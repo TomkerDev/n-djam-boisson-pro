@@ -3,16 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "shared",
+    "server"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "typecheck": "tsc -b && npm run typecheck --workspace @ndjam/api",
+    "preview": "vite preview",
+    "test": "npm run test --workspace @ndjam/api",
+    "db:up": "npm run db:up --workspace @ndjam/api",
+    "db:down": "npm run db:down --workspace @ndjam/api",
+    "db:migrate": "npm run db:migrate --workspace @ndjam/api",
+    "db:seed": "npm run db:seed --workspace @ndjam/api"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@ndjam/shared": "*",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
