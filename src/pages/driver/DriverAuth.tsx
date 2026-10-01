@@ -1,68 +1,52 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
-import { Truck, ArrowLeft } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Truck, ArrowLeft, Loader2, Info } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api";
 
+/**
+ * Connexion livreur.
+ *
+ * L'inscription n'est volontairement pas offerte ici : l'API la reserve a un
+ * administrateur, car un livreur ne choisit pas lui-meme le depot auquel il est
+ * rattache - il s'attribuerait n'importe quel perimetre commercial.
+ */
 const DriverAuth = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [driverName, setDriverName] = useState("");
   const [phone, setPhone] = useState("");
-  const [vehicleNumber, setVehicleNumber] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { login } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (isLogin) {
-      // Simulate login
-      toast({
-        title: "Connexion réussie",
-        description: "Bienvenue dans votre espace livreur",
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      await login(phone, password);
+      toast.success("Connexion réussie");
+      navigate("/livreur/dashboard", { replace: true });
+    } catch (error) {
+      toast.error("Connexion refusée", {
+        description:
+          error instanceof ApiError
+            ? error.message
+            : "Le serveur est injoignable, réessayez plus tard.",
       });
-      navigate("/livreur/dashboard");
-    } else {
-      // Simulate registration with geolocation request
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          () => {
-            toast({
-              title: "Inscription réussie",
-              description: "Votre compte livreur a été créé",
-            });
-            navigate("/livreur/dashboard");
-          },
-          () => {
-            toast({
-              title: "Inscription réussie",
-              description: "Votre compte livreur a été créé",
-            });
-            navigate("/livreur/dashboard");
-          }
-        );
-      } else {
-        toast({
-          title: "Inscription réussie",
-          description: "Votre compte livreur a été créé",
-        });
-        navigate("/livreur/dashboard");
-      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Button
-          variant="ghost"
-          className="mb-6"
-          onClick={() => navigate("/")}
-        >
+        <Button variant="ghost" className="mb-6" onClick={() => navigate("/")}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Retour
         </Button>
@@ -72,40 +56,13 @@ const DriverAuth = () => {
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
               <Truck className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">
-              Espace Livreur
-            </h1>
+            <h1 className="text-2xl font-bold text-foreground">Espace Livreur</h1>
             <p className="text-sm text-muted-foreground">
-              {isLogin ? "Connectez-vous à votre compte" : "Créez votre compte livreur"}
+              Connectez-vous à votre compte
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="driverName">Nom Complet</Label>
-                  <Input
-                    id="driverName"
-                    placeholder="Votre nom complet"
-                    value={driverName}
-                    onChange={(e) => setDriverName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="vehicleNumber">Numéro du Véhicule</Label>
-                  <Input
-                    id="vehicleNumber"
-                    placeholder="Ex: TD-1234-ND"
-                    value={vehicleNumber}
-                    onChange={(e) => setVehicleNumber(e.target.value)}
-                    required
-                  />
-                </div>
-              </>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="phone">Numéro de Téléphone</Label>
               <Input
@@ -113,7 +70,7 @@ const DriverAuth = () => {
                 type="tel"
                 placeholder="+235 XX XX XX XX"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(event) => setPhone(event.target.value)}
                 required
               />
             </div>
@@ -125,25 +82,23 @@ const DriverAuth = () => {
                 type="password"
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 required
               />
             </div>
 
-            <Button type="submit" className="w-full">
-              {isLogin ? "Se Connecter" : "Créer mon Compte"}
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Se Connecter
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-primary hover:underline"
-            >
-              {isLogin
-                ? "Pas encore de compte ? Inscrivez-vous"
-                : "Déjà inscrit ? Connectez-vous"}
-            </button>
+          <div className="mt-6 p-3 bg-muted rounded-lg flex items-start gap-2">
+            <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Pas encore de compte ? Les livreurs sont enregistrés par le dépôt
+              ou un administrateur, qui vous rattache à un dépôt.
+            </p>
           </div>
         </Card>
       </div>
