@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Store, User, Phone, Lock } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { MapPin, Store, User, Phone, Lock, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api";
 
 const ClientAuth = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { login, registerClient } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     etablissement: "",
     responsable: "",
@@ -18,29 +21,35 @@ const ClientAuth = () => {
     password: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
-    // Simuler la demande de géolocalisation
-    if (!isLogin && "geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          toast({
-            title: "Position enregistrée",
-            description: "Votre adresse de livraison a été définie.",
-          });
-          navigate("/client/dashboard");
-        },
-        (error) => {
-          toast({
-            title: "Géolocalisation requise",
-            description: "Veuillez autoriser l'accès à votre position pour continuer.",
-            variant: "destructive",
-          });
-        }
-      );
-    } else {
-      navigate("/client/dashboard");
+    setIsSubmitting(true);
+
+    try {
+      if (isLogin) {
+        await login(formData.telephone, formData.password);
+        toast.success("Connexion réussie");
+      } else {
+        await registerClient({
+          establishmentName: formData.etablissement,
+          managerName: formData.responsable,
+          phone: formData.telephone,
+          password: formData.password,
+        });
+        toast.success("Compte créé", {
+          description: "Votre établissement est enregistré.",
+        });
+      }
+      navigate("/client/dashboard", { replace: true });
+    } catch (error) {
+      toast.error("Échec de l'opération", {
+        description:
+          error instanceof ApiError
+            ? error.message
+            : "Le serveur est injoignable, réessayez plus tard.",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -138,7 +147,10 @@ const ClientAuth = () => {
             </div>
           )}
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : null}
             {isLogin ? "Se connecter" : "S'inscrire"}
           </Button>
         </form>

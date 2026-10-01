@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Banknote, Smartphone, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/context/CartContext";
+import { ApiError } from "@/lib/api";
+import { createOrder } from "@/lib/apiOrders";
 import { DELIVERY_DELAY_HOURS } from "@/lib/constants";
 import { formatFcfa } from "@/lib/format";
 
@@ -32,21 +34,49 @@ const paymentOptions = [
   },
 ];
 
+/** Moyens de paiement acceptes par l'API pour une commande. */
+type PaymentMethod = "cod" | "moov" | "airtel";
+
 const ClientCheckout = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { items, subtotal, commission, total, commissionRatePercent, clear } = useCart();
-  const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
 
-  const handleConfirmOrder = () => {
-    toast({
-      title: "Commande confirmée !",
-      description: "Vous recevrez une notification lorsqu'un livreur sera attribué.",
-    });
-    // Le panier est vidé après validation : les écrans suivants ne doivent plus
-    // refléter la commande qui vient d'être passée.
-    clear();
-    navigate("/client/tracking");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleConfirmOrder = async () => {
+    setIsSubmitting(true);
+    try {
+      const order = await createOrder({
+        items: items.map(({ product, quantity }) => ({
+          productId: product.id,
+          quantity,
+        })),
+        paymentMethod,
+      });
+
+      toast({
+        title: "Commande confirmée !",
+        description: `Commande ${order.reference} enregistrée.`,
+      });
+
+      // Le panier est vidé après validation : les écrans suivants ne doivent plus
+      // refléter la commande qui vient d'être passée.
+      clear();
+      navigate("/client/tracking", { state: { orderId: order.id } });
+    } catch (error) {
+      toast({
+        title: "Commande refusée",
+        description:
+          error instanceof ApiError
+            ? error.message
+            : "Le serveur est injoignable, réessayez plus tard.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (items.length === 0) {
@@ -99,7 +129,7 @@ const ClientCheckout = () => {
                   {quantity} × {product.name}
                 </span>
                 <span className="font-medium">
-                  {formatFcfa(product.price * quantity)}
+                  {formatFcfa(product.priceFcfa * quantity)}
                 </span>
               </div>
             ))}
@@ -120,7 +150,7 @@ const ClientCheckout = () => {
           <h2 className="text-lg font-semibold text-foreground mb-4">
             Mode de paiement
           </h2>
-          <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+          <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
             <div className="space-y-3">
               {paymentOptions.map((option) => {
                 const Icon = option.icon;
@@ -170,9 +200,12 @@ const ClientCheckout = () => {
         <div className="container mx-auto">
           <Button
             className="w-full h-14 text-lg"
-            onClick={handleConfirmOrder}
+            onClick={() => void handleConfirmOrder()}
+            disabled={isSubmitting}
           >
-            Confirmer la commande
+            {isSubmitting
+              ? "Envoi en cours..."
+              : "Confirmer la commande"}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,9 +13,12 @@ import {
   ShoppingCart,
   User,
   Package,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import { categories, featuredProducts } from "@/data/products";
+import { fetchProducts } from "@/lib/apiOrders";
+import { categories } from "@/data/products";
 import { STARTER_ORDER_QUOTA } from "@/lib/constants";
 import { formatFcfa } from "@/lib/format";
 
@@ -28,8 +32,18 @@ const ClientDashboard = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const { totalItems } = useCart();
+  const { logout } = useAuth();
   const remainingOrders = 12;
   const maxOrders = STARTER_ORDER_QUOTA;
+
+  // Le tableau de bord consomme la meme source que le catalogue : sans cela il
+  // afficherait des produits fictifs alors que le catalogue est reel.
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: fetchProducts,
+  });
+
+  const featuredProducts = (products ?? []).slice(0, 3);
 
   const categoriesWithIcons = categories.map((category) => ({
     ...category,
@@ -58,8 +72,13 @@ const ClientDashboard = () => {
                   </span>
                 )}
               </Button>
-              <Button variant="ghost" size="icon">
-                <User className="w-5 h-5" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => void logout().then(() => navigate("/"))}
+                aria-label="Se déconnecter"
+              >
+                <LogOut className="w-5 h-5" />
               </Button>
             </div>
           </div>
@@ -156,7 +175,7 @@ const ClientDashboard = () => {
                     </p>
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-bold text-primary">
-                        {formatFcfa(product.price)}
+                        {formatFcfa(product.priceFcfa)}
                       </span>
                       <Badge variant="secondary" className="text-xs">
                         En stock

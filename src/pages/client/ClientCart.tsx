@@ -73,10 +73,10 @@ const ClientCart = () => {
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground">
-                      {formatFcfa(product.price)} × {quantity}
+                      {formatFcfa(product.priceFcfa)} × {quantity}
                     </span>
                     <Badge variant="secondary">
-                      {formatFcfa(product.price * quantity)}
+                      {formatFcfa(product.priceFcfa * quantity)}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2 mt-3 w-fit bg-primary/10 rounded-lg p-1">

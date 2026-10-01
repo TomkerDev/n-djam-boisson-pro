@@ -8,19 +8,44 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
-import { products, type Product } from "@/data/products";
 import { PLATFORM_COMMISSION_RATE } from "@/lib/constants";
+import type { ApiProduct } from "@/lib/apiOrders";
 
 const STORAGE_KEY = "ndjam.cart.v1";
 
+/**
+ * Reference produit conservee dans le panier.
+ *
+ * Le prix est fige au moment de l'ajout : le catalogue peut changer entre deux
+ * sessions et l'utilisateur doit voir le prix qu'il a reellement choisi. Le
+ * serveur, lui, recalcule toujours au moment de la commande.
+ */
+export interface CartProduct {
+  id: string;
+  name: string;
+  priceFcfa: number;
+  image: string | null;
+  supplier: string;
+  unit: string;
+  category: string;
+}
+
 export interface CartItem {
-  product: Product;
+  product: CartProduct;
   quantity: number;
 }
 
-interface StoredCart {
-  productId: number;
-  quantity: number;
+/** Convertit un produit de l'API en reference stockable dans le panier. */
+export function toCartProduct(product: ApiProduct): CartProduct {
+  return {
+    id: product.id,
+    name: product.name,
+    priceFcfa: product.priceFcfa,
+    image: product.image,
+    supplier: product.supplier,
+    unit: product.unit,
+    category: product.category,
+  };
 }
 
 interface CartContextValue {
@@ -35,11 +60,11 @@ interface CartContextValue {
   total: number;
   /** Taux de commission appliqué, en pourcentage. */
   commissionRatePercent: number;
-  quantityOf: (productId: number) => number;
-  addItem: (product: Product, quantity?: number) => void;
-  setQuantity: (productId: number, quantity: number) => void;
-  increment: (productId: number, delta?: number) => void;
-  removeItem: (productId: number) => void;
+  quantityOf: (productId: string) => number;
+  addItem: (product: CartProduct, quantity?: number) => void;
+  setQuantity: (productId: string, quantity: number) => void;
+  increment: (productId: string, delta?: number) => void;
+  removeItem: (productId: string) => void;
   clear: () => void;
 }
 
@@ -55,18 +80,25 @@ function readStoredCart(): CartItem[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    const catalog = new Map(products.map((product) => [product.id, product]));
-
     return parsed.flatMap((entry) => {
       if (typeof entry !== "object" || entry === null) return [];
 
-      const { productId, quantity } = entry as Partial<StoredCart>;
-      if (typeof productId !== "number" || typeof quantity !== "number") return [];
-      if (!Number.isInteger(quantity) || quantity <= 0) return [];
+      const { product, quantity } = entry as { product?: unknown; quantity?: unknown };
+      if (typeof product !== "object" || product === null) return [];
+      if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity <= 0) {
+        return [];
+      }
 
-      // Un produit retiré du catalogue est ignoré plutôt que de casser le panier.
-      const product = catalog.get(productId);
-      return product ? [{ product, quantity }] : [];
+      const candidate = product as Partial<CartProduct>;
+      if (
+        typeof candidate.id !== "string" ||
+        typeof candidate.name !== "string" ||
+        typeof candidate.priceFcfa !== "number"
+      ) {
+        return [];
+      }
+
+      return [{ product: candidate as CartProduct, quantity }];
     });
   } catch {
     // Un panier corrompu ne doit jamais empêcher l'application de démarrer.
@@ -85,18 +117,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify(
-        items.map(({ product, quantity }) => ({ productId: product.id, quantity })),
+        items.map(({ product, quantity }) => ({ product, quantity })),
       ),
     );
   }, [items]);
 
   const quantityOf = useCallback(
-    (productId: number) =>
+    (productId: string) =>
       items.find((item) => item.product.id === productId)?.quantity ?? 0,
     [items],
   );
 
-  const addItem = useCallback((product: Product, quantity = 1) => {
+  const addItem = useCallback((product: CartProduct, quantity = 1) => {
     setItems((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -111,7 +143,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     toast.success(`${product.name} ajouté au panier`);
   }, []);
 
-  const setQuantity = useCallback((productId: number, quantity: number) => {
+  const setQuantity = useCallback((productId: string, quantity: number) => {
     setItems((prev) => {
       if (!Number.isInteger(quantity) || quantity <= 0) {
         return prev.filter((item) => item.product.id !== productId);
@@ -122,7 +154,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const increment = useCallback((productId: number, delta = 1) => {
+  const increment = useCallback((productId: string, delta = 1) => {
     setItems((prev) =>
       prev.flatMap((item) => {
         if (item.product.id !== productId) return [item];
@@ -132,7 +164,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const removeItem = useCallback((productId: number) => {
+  const removeItem = useCallback((productId: string) => {
     setItems((prev) => prev.filter((item) => item.product.id !== productId));
   }, []);
 
@@ -141,7 +173,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const value = useMemo<CartContextValue>(() => {
     const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
     const subtotal = items.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
+      (sum, item) => sum + item.product.priceFcfa * item.quantity,
       0,
     );
     const commission = Math.round(subtotal * PLATFORM_COMMISSION_RATE);
