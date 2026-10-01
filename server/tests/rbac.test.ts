@@ -8,6 +8,7 @@ import {
   createUser,
   depotIdOf,
   truncateAll,
+  uniquePhone,
   type TestUser,
 } from "./helpers.js";
 
@@ -418,5 +419,43 @@ describe("Encaissement", () => {
     expect(saved.changeGiven).toBe(6_800);
     expect(saved.order.status).toBe("DELIVERED");
     expect(saved.order.paymentStatus).toBe("PAID");
+  });
+});
+describe("Inscription d'un livreur (reservee a l'admin)", () => {
+  it("refuse l'inscription par un fournisseur", async () => {
+    const supplier = await createUser(app, "supplier");
+    const depotId = await depotIdOf(supplier);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/admin/depot/${depotId}/drivers`,
+      headers: auth(supplier),
+      payload: {
+        fullName: "Livreur Intrus",
+        phone: uniquePhone(),
+        password: "MotDePasseTest2024",
+        vehicleNumber: "TD-9999",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("refuse l'inscription par un client", async () => {
+    const client = await createUser(app, "client");
+    const depotId = await createDepot("Depot Tiers 3");
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/admin/depot/${depotId}/drivers`,
+      headers: auth(client),
+      payload: {
+        fullName: "Livreur Intrus",
+        phone: uniquePhone(),
+        password: "MotDePasseTest2024",
+        vehicleNumber: "TD-9999",
+      },
+    });
+expect(response.statusCode).toBe(403);
   });
 });

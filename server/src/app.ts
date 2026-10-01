@@ -7,7 +7,7 @@ import { authenticate } from "./plugins/auth.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
 import { deliveryRoutes } from "./modules/deliveries/routes.js";
-import { supplierRoutes } from "./modules/supplier/routes.js";
+import { adminRoutes, supplierRoutes } from "./modules/supplier/routes.js";
 import { productRoutes } from "./modules/products/routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -108,6 +108,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(orderRoutes, { prefix: "/orders" });
       await api.register(deliveryRoutes, { prefix: "/deliveries" });
       await api.register(supplierRoutes, { prefix: "/supplier" });
+      await api.register(adminRoutes, { prefix: "/admin" });
     },
     { prefix: "/api" },
   );
